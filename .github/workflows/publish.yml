@@ -1,0 +1,68 @@
+name: Publish npm package
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Test
+        run: bun test
+
+      - name: Build
+        run: bun run build
+
+      - name: Check npm version
+        id: version
+        shell: bash
+        run: |
+          name=$(node -p "require('./package.json').name")
+          local_version=$(node -p "require('./package.json').version")
+          online_version=$(npm view "$name" version 2>/dev/null || true)
+
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "local=$local_version" >> "$GITHUB_OUTPUT"
+          echo "online=$online_version" >> "$GITHUB_OUTPUT"
+
+          if [ "$online_version" = "$local_version" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "$name@$local_version 已存在于 npm，跳过发布。"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            if [ -n "$online_version" ]; then
+              echo "本地版本: $local_version；npm 最新版本: $online_version。"
+            else
+              echo "$name 尚未发布到 npm。"
+            fi
+          fi
+
+      - name: Publish
+        if: steps.version.outputs.publish == 'true'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
