@@ -39,7 +39,7 @@ reload-extension --list --browser chrome
 reload-extension --id ncekidoiekbflbbpoldpfldjnbccfmmm
 ```
 
-CLI 首次连接浏览器时可能触发 Remote Debugging 授权。连接脚本会处理授权并复用后续 session，不关闭现有浏览器或标签页。
+CLI 连接浏览器时可能触发 Remote Debugging 授权，连接脚本会处理授权。查询或重载结束后会关闭对应 session，操作失败时也会清理连接。现有浏览器和标签页保持打开。
 
 ## API
 

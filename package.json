@@ -1,6 +1,6 @@
 {
   "name": "reload-extension",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "通过命令行按名称重新加载 Chrome 或 Edge 中的解压缩扩展。",
   "type": "module",
   "packageManager": "bun@1.4.2",

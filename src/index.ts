@@ -18,8 +18,11 @@ export async function listExtensions(
   options: ListExtensionsOptions = {},
 ): Promise<BrowserExtension[]> {
   const browser = normalizeBrowser(options.browser);
-  const result = await runDevTools(browser, ['list_extensions']);
-  return parseExtensions(result.stdout);
+  try {
+    return await readExtensions(browser);
+  } finally {
+    await runDevTools(browser, ['stop']);
+  }
 }
 
 export async function reloadExtension(
@@ -30,17 +33,26 @@ export async function reloadExtension(
   }
 
   const browser = normalizeBrowser(options.browser);
-  let extension: BrowserExtension | { id: string; name: string };
+  try {
+    let extension: BrowserExtension | { id: string; name: string };
 
-  if (options.id) {
-    extension = { id: options.id, name: options.name ?? options.id };
-  } else {
-    const extensions = await listExtensions({ browser });
-    extension = findExtension(extensions, options.name!);
+    if (options.id) {
+      extension = { id: options.id, name: options.name ?? options.id };
+    } else {
+      const extensions = await readExtensions(browser);
+      extension = findExtension(extensions, options.name!);
+    }
+
+    await runDevTools(browser, ['reload_extension', extension.id]);
+    return extension;
+  } finally {
+    await runDevTools(browser, ['stop']);
   }
+}
 
-  await runDevTools(browser, ['reload_extension', extension.id]);
-  return extension;
+async function readExtensions(browser: 'edge' | 'chrome'): Promise<BrowserExtension[]> {
+  const result = await runDevTools(browser, ['list_extensions']);
+  return parseExtensions(result.stdout);
 }
 
 function normalizeBrowser(browser: BrowserName = 'edge'): 'edge' | 'chrome' {
