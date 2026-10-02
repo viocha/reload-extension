@@ -72,6 +72,16 @@ bun run dev -- "Web Toolkit"
 bun run build
 ```
 
+构建时可从 skills 仓库同步浏览器连接脚本。复制 `.env.example` 为 `.env`，设置 skills 仓库根目录：
+
+```dotenv
+SKILLS_REPO_DIR=D:/IT/ai/skills
+```
+
+路径支持绝对路径或相对于本项目的路径。Bun 自动读取 `.env`，系统环境变量优先。配置后，`bun run build` 先同步共享脚本和 Chrome DevTools 连接脚本，再构建；也可通过 `bun run sync:devtools` 单独同步。未配置时使用仓库内的脚本快照，CI 无需本机 skills 目录。已配置的源文件缺失或结构不符合预期时，构建报错。
+
+`scripts/devtools/` 中除 `package-runtime.ps1` 外的脚本均由同步生成，应随代码提交。同步器自动适配项目内 CLI 依赖路径和独立 session（Edge：`e10ad`，Chrome：`c10ad`）；`package-runtime.ps1` 提供 npm 包运行时的依赖解析。更新连接逻辑时修改 skills 源文件，再执行构建。
+
 构建后的 CLI 和库入口位于：
 
 ```text

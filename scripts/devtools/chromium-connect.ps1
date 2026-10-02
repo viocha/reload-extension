@@ -1,30 +1,3 @@
-function Resolve-ChromeDevToolsPackageRoot {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$StartPath
-    )
-
-    if ($env:RELOAD_EXTENSION_CHROME_DEVTOOLS_ROOT -and (Test-Path -LiteralPath $env:RELOAD_EXTENSION_CHROME_DEVTOOLS_ROOT)) {
-        return $env:RELOAD_EXTENSION_CHROME_DEVTOOLS_ROOT
-    }
-
-    $current = [IO.Path]::GetFullPath($StartPath)
-    while ($current) {
-        $candidate = Join-Path $current 'node_modules\chrome-devtools-mcp'
-        if (Test-Path -LiteralPath $candidate) {
-            return $candidate
-        }
-
-        $parent = Split-Path -Parent $current
-        if (-not $parent -or $parent -eq $current) {
-            break
-        }
-        $current = $parent
-    }
-
-    throw "未找到项目依赖 chrome-devtools-mcp，起始目录: $StartPath"
-}
-
 function Resolve-ChromiumExecutable {
     param(
         [Parameter(Mandatory = $true)]
@@ -329,6 +302,8 @@ function Restore-ChromiumMinimizedWindows {
 }
 
 function Invoke-ChromiumRemoteDebuggingAllow {
+    # 先恢复连接前的最小化状态，再通过 UIA 调用授权按钮，缩短窗口遮挡时间。
+    Restore-ChromiumMinimizedWindows
     $script:chromiumRemoteDebuggingDialogHandle = [IntPtr]::Zero
     $callback = [ChromiumConnectNativeWindow+EnumWindowsProc]{
         param([IntPtr]$hWnd, [IntPtr]$lParam)

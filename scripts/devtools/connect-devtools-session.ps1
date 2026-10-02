@@ -24,14 +24,9 @@ if ($SessionId -notmatch '^[a-fA-F0-9-]+$') {
 }
 
 . (Join-Path $PSScriptRoot 'chromium-connect.ps1')
+. (Join-Path $PSScriptRoot 'package-runtime.ps1')
 
-$packageRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$chromeDevToolsPackageRoot = Resolve-ChromeDevToolsPackageRoot -StartPath $packageRoot
-$cliEntry = Join-Path $chromeDevToolsPackageRoot 'build\src\bin\chrome-devtools.js'
-$node = Get-Command node.exe -ErrorAction Stop
-if (-not (Test-Path -LiteralPath $cliEntry)) {
-    throw "未找到项目依赖 chrome-devtools-mcp CLI: $cliEntry"
-}
+# CLI 入口由 package-runtime.ps1 从项目依赖解析。
 
 function Start-ChromeDevToolsCliProcess(
     [string[]]$Arguments,
@@ -77,7 +72,7 @@ function Close-StartedBrowser {
     }
 
     try {
-        & $node.Source $cliEntry stop "--sessionId=$SessionId" | Out-Null
+        Invoke-ChromeDevToolsCli stop "--sessionId=$SessionId" | Out-Null
     } catch {}
 
     Stop-ChromiumProcessTree -Process $script:startedBrowserProcess

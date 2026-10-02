@@ -14,19 +14,7 @@ $ErrorActionPreference = 'Stop'
 $sessionId = if ($Browser -eq 'msedge') { 'e10ad' } else { 'c10ad' }
 $connectScript = Join-Path $PSScriptRoot 'connect-devtools-session.ps1'
 . (Join-Path $PSScriptRoot 'chromium-connect.ps1')
-
-$packageRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-$chromeDevToolsPackageRoot = Resolve-ChromeDevToolsPackageRoot -StartPath $packageRoot
-$cliEntry = Join-Path $chromeDevToolsPackageRoot 'build\src\bin\chrome-devtools.js'
-$node = Get-Command node.exe -ErrorAction Stop
-if (-not (Test-Path -LiteralPath $cliEntry)) {
-    throw "未找到项目依赖 chrome-devtools-mcp CLI: $cliEntry"
-}
-
-function Invoke-ChromeDevToolsCli {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
-    & $node.Source $cliEntry @Arguments
-}
+. (Join-Path $PSScriptRoot 'package-runtime.ps1')
 $script:startedBrowserProcess = $null
 
 function Get-BrowserProcesses {

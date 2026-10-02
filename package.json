@@ -1,6 +1,6 @@
 {
   "name": "reload-extension",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "通过命令行按名称重新加载 Chrome 或 Edge 中的解压缩扩展。",
   "type": "module",
   "packageManager": "bun@1.4.2",
@@ -21,7 +21,8 @@
     "help": "bun src/cli.ts --help",
     "build:js": "bun build src/cli.ts src/index.ts --outdir dist --target=node --format=esm",
     "build:types": "bun x tsc -p tsconfig.json",
-    "build": "bun run clean && bun run build:js && bun run build:types",
+    "sync:devtools": "bun scripts/sync-devtools.ts",
+    "build": "bun run sync:devtools && bun run clean && bun run build:js && bun run build:types",
     "test": "bun test",
     "pack:check": "bun run build && npm pack --dry-run",
     "prepack": "bun run build"
