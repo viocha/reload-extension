@@ -1,16 +1,18 @@
 # reload-extension
 
-在 Windows 上通过 Chrome DevTools MCP 连接当前正在运行的 Chrome 或 Edge，并按名称重新加载 unpacked 浏览器扩展。
+在 Windows 上通过 Playwright CLI 连接当前正在运行的 Chrome 或 Edge，并按名称重新加载 unpacked 浏览器扩展。
 
 项目使用 TypeScript 开发，Bun 负责依赖管理、测试和构建，CLI 参数解析由 `commander` 提供。
 
 ## 安装
 
 ```powershell
-npm install -g reload-extension
+bun install -g reload-extension
 ```
 
-包直接依赖 `chrome-devtools-mcp`，运行时使用包内依赖，不要求全局安装 `chrome-devtools-mcp` 或 `chrome-devtools`。
+包直接依赖 `@playwright/cli`，运行时使用包内依赖，不要求全局安装 `@playwright/cli`。
+
+运行时需要 Node.js，包内 Playwright CLI 由 Node.js 执行。Bun 用于开发、测试和构建。
 
 ## 使用
 
@@ -96,9 +98,11 @@ bun run build
 SKILLS_REPO_DIR=D:/IT/ai/skills
 ```
 
-路径支持绝对路径或相对于本项目的路径。Bun 自动读取 `.env`，系统环境变量优先。配置后，`bun run build` 先同步共享脚本和 Chrome DevTools 连接脚本，再构建；也可通过 `bun run sync:devtools` 单独同步。未配置时使用仓库内的脚本快照，CI 无需本机 skills 目录。已配置的源文件缺失或结构不符合预期时，构建报错。
+路径支持绝对路径或相对于本项目的路径。Bun 自动读取 `.env`，系统环境变量优先。配置后，`bun run build` 先同步共享脚本和 Playwright 连接脚本，再构建；也可通过 `bun run sync:playwright` 单独同步。未配置时使用仓库内的脚本快照，CI 无需本机 skills 目录。已配置的源文件缺失或结构不符合预期时，构建报错。
 
-`scripts/devtools/` 中除 `package-runtime.ps1` 和 `devtools-session.ps1` 外的脚本均由同步生成，应随代码提交。同步器自动适配项目内 CLI 依赖路径和独立 session（Edge：`e10ad`，Chrome：`c10ad`）；`package-runtime.ps1` 提供 npm 包运行时的依赖解析，`devtools-session.ps1` 在单个 PowerShell 进程中完成连接、查询、重载和清理，一次操作只检查一次连接。更新连接逻辑时修改 skills 源文件，再执行构建。
+`scripts/playwright/` 的 `chromium-connect.ps1`、`connect-playwright-session.ps1` 和 `session-state.ps1` 由同步生成，应随代码提交。同步器适配项目内 CLI 与 core 依赖路径；`package-runtime.ps1` 解析包内依赖，`browser-session.ps1` 在单个 PowerShell 进程中完成连接、查询、重载和清理。会话按浏览器隔离（`reload-extension-edge`、`reload-extension-chrome`），并通过互斥锁串行处理同一浏览器的重载。更新连接逻辑时修改 skills 源文件，再执行构建。
+
+扩展查询和重载使用浏览器级 CDP 的 `Extensions.getExtensions`、`Extensions.loadUnpacked`，需要支持这些协议方法的 Chromium 浏览器。工具等待 CDP 完成响应，独立会话将页面稳定等待设置为 0；普通页面自动化会话不受影响。
 
 构建后的 CLI 和库入口位于：
 

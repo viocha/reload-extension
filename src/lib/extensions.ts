@@ -1,24 +1,9 @@
 import type { BrowserExtension } from '../types.js';
 
-const EXTENSION_LINE = /^id=([a-p]{32})\s+"(.*)"\s+v(\S+)\s+(Enabled|Disabled)$/;
-
 export function parseExtensions(output: string): BrowserExtension[] {
-  const extensions: BrowserExtension[] = [];
-
-  for (const rawLine of output.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    const match = EXTENSION_LINE.exec(line);
-    if (!match) continue;
-
-    extensions.push({
-      id: match[1],
-      name: match[2],
-      version: match[3],
-      enabled: match[4] === 'Enabled',
-    });
-  }
-
-  return extensions;
+  const { extensions } = JSON.parse(output);
+  if (!Array.isArray(extensions)) throw new Error('扩展列表格式无效');
+  return extensions.map(({ id, name, version, enabled }) => ({ id, name, version, enabled }));
 }
 
 export function findExtension(

@@ -1,5 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { CommandResult } from './devtools.js';
+import type { CommandResult } from './browser.js';
 
 const PREFIX = 'RELOAD_EXTENSION_RESULT=';
 
@@ -42,7 +42,7 @@ export function createCommandSession(child: ChildProcessWithoutNullStreams) {
   });
   const run = (args: string[]): Promise<CommandResult> => {
     if (failure) return Promise.reject(failure);
-    if (pending) return Promise.reject(new Error('同一 DevTools 会话不能并发执行命令'));
+    if (pending) return Promise.reject(new Error('同一 浏览器会话不能并发执行命令'));
     return new Promise((resolve, reject) => {
       pending = { resolve, reject };
       child.stdin.write(JSON.stringify(args) + '\n');

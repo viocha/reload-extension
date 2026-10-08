@@ -1,4 +1,4 @@
-import { withDevToolsSession, type RunDevTools } from './lib/devtools.js';
+import { withBrowserSession, type RunBrowser } from './lib/browser.js';
 import { findExtension, parseExtensions } from './lib/extensions.js';
 import { extensionCache } from './lib/extension-cache.js';
 import type {
@@ -19,7 +19,7 @@ export async function listExtensions(
   options: ListExtensionsOptions = {},
 ): Promise<BrowserExtension[]> {
   const browser = normalizeBrowser(options.browser);
-  return withDevToolsSession(browser, readExtensions);
+  return withBrowserSession(browser, readExtensions);
 }
 
 export async function clearExtensionCache(): Promise<void> {
@@ -34,7 +34,7 @@ export async function reloadExtension(
   }
 
   const browser = normalizeBrowser(options.browser);
-  return withDevToolsSession(browser, async (run) => {
+  return withBrowserSession(browser, async (run) => {
     let extension: BrowserExtension | { id: string; name: string };
 
     if (options.id) {
@@ -61,7 +61,7 @@ export async function reloadExtension(
   });
 }
 
-async function readExtensions(run: RunDevTools): Promise<BrowserExtension[]> {
+async function readExtensions(run: RunBrowser): Promise<BrowserExtension[]> {
   const result = await run(['list_extensions']);
   return parseExtensions(result.stdout);
 }

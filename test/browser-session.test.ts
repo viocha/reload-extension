@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createCommandSession } from '../src/lib/devtools-session';
+import { createCommandSession } from '../src/lib/browser-session';
 
 function createFixture() {
   return createCommandSession(spawn(process.execPath, ['-e', `
@@ -40,44 +40,34 @@ test('进程异常退出时请求和清理均明确失败', async () => {
 
 test.skipIf(process.platform !== 'win32')('PowerShell 会话只连接一次，并识别退出码为零的工具错误', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reload-session-test-'));
-  const worker = await readFile(new URL('../scripts/devtools/devtools-session.ps1', import.meta.url), 'utf8');
-  await writeFile(path.join(root, 'devtools-session.ps1'), worker);
+  const worker = await readFile(new URL('../scripts/playwright/browser-session.ps1', import.meta.url), 'utf8');
+  await writeFile(path.join(root, 'browser-session.ps1'), worker);
   await writeFile(path.join(root, 'package-runtime.ps1'), `
-function Invoke-ChromeDevToolsCli {
+function Invoke-PlaywrightCli {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
-    switch ($Arguments[0]) {
-        'list_extensions' { '扩展列表' }
-        'reload_extension' {
-            if ($Arguments[1] -eq 'bad') { 'Error: 找不到扩展' } else { 'Extension reloaded.' }
-        }
-        'stop' { [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'stopped'), 'yes') }
-    }
+    if ($Arguments -contains 'detach') { [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'stopped'), 'yes'); return }
+    $code = $Arguments[-1]
+    if ($code -eq 'bad') { '{"error":"找不到扩展"}' }
+    elseif ($code -eq 'list') { '{"extensions":[]}' }
+    else { '{"reloaded":true}' }
 }
 `);
-  await writeFile(path.join(root, 'daemon-state.ps1'), `
-function Enter-DevToolsSessionLock {
-    $mutex = [Threading.Mutex]::new($false)
-    [void]$mutex.WaitOne()
-    return $mutex
-}
-function Repair-DevToolsDaemonState {}
-`);
-  await writeFile(path.join(root, 'browser-cli-wrapper.ps1'), `
-param([string]$Browser, [Parameter(ValueFromRemainingArguments = $true)][string[]]$CliArgs)
+  await writeFile(path.join(root, 'connect-playwright-session.ps1'), `
+param([string]$Browser, [string]$Session, [int]$TimeoutSeconds, [string[]]$CommandArgs)
 [IO.File]::AppendAllText((Join-Path $PSScriptRoot 'connections'), '1')
-Invoke-ChromeDevToolsCli @CliArgs
+Invoke-PlaywrightCli @CommandArgs
 `);
   try {
     // 发布产物使用 Node，直接验证它与 PowerShell 的双向通信。
     const child = spawn('node.exe', ['--input-type=module', '-e', `
       import { spawn } from 'node:child_process';
       import { strict as assert } from 'node:assert';
-      import { createCommandSession } from ${JSON.stringify(new URL('../src/lib/devtools-session.ts', import.meta.url).href)};
-      const session = createCommandSession(spawn('pwsh.exe', ['-NoLogo', '-NoProfile', '-File', ${JSON.stringify(path.join(root, 'devtools-session.ps1'))}, '-Browser', 'msedge'], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }));
+      import { createCommandSession } from ${JSON.stringify(new URL('../src/lib/browser-session.ts', import.meta.url).href)};
+      const session = createCommandSession(spawn('pwsh.exe', ['-NoLogo', '-NoProfile', '-File', ${JSON.stringify(path.join(root, 'browser-session.ps1'))}, '-Browser', 'msedge'], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }));
       try {
-        assert.equal((await session.run(['list_extensions'])).stdout, '扩展列表');
-        assert.equal((await session.run(['reload_extension', 'good'])).stdout, 'Extension reloaded.');
-        await assert.rejects(session.run(['reload_extension', 'bad']), /找不到扩展/);
+        assert.equal((await session.run(['run', 'list'])).stdout, '{"extensions":[]}');
+        assert.equal((await session.run(['run', 'good'])).stdout, '{"reloaded":true}');
+        await assert.rejects(session.run(['run', 'bad']), /找不到扩展/);
       } finally { await session.close(); }
     `], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let errors = '';

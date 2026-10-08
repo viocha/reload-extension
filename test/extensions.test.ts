@@ -1,14 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { findExtension, parseExtensions } from '../src/lib/extensions.js';
 
-const output = `DEVTOOLS_PROBE_FAILED=msedge SESSION=e10ad
-## Extensions
-id=dfbdlidakbmfedfidhpbnelkkjoombhj "Bookmark Pro" v1.9.2 Enabled
-id=ncekidoiekbflbbpoldpfldjnbccfmmm "Web Toolkit" v1.9.5 Enabled
-`;
+const output = JSON.stringify({ extensions: [
+  { id: 'dfbdlidakbmfedfidhpbnelkkjoombhj', name: 'Bookmark Pro', version: '1.9.2', enabled: true },
+  { id: 'ncekidoiekbflbbpoldpfldjnbccfmmm', name: 'Web Toolkit', version: '1.9.5', enabled: true },
+] });
 
 describe('extensions', () => {
-  test('parseExtensions parses chrome-devtools output', () => {
+  test('解析结构化扩展列表', () => {
     expect(parseExtensions(output)).toEqual([
       {
         id: 'dfbdlidakbmfedfidhpbnelkkjoombhj',
