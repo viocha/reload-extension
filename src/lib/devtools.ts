@@ -1,95 +1,51 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
+import { createCommandSession } from './devtools-session.js';
 
 type Browser = 'edge' | 'chrome';
+export interface CommandResult { stdout: string; stderr: string }
+export type RunDevTools = (args: string[]) => Promise<CommandResult>;
 
-interface CommandResult {
-  stdout: string;
-  stderr: string;
+let packageRoot = path.dirname(fileURLToPath(import.meta.url));
+while (!existsSync(path.join(packageRoot, 'package.json'))) {
+  const parent = path.dirname(packageRoot);
+  if (parent === packageRoot) throw new Error('未找到 reload-extension 包目录');
+  packageRoot = parent;
 }
-
-const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const scriptsDir = path.join(packageRoot, 'scripts', 'devtools');
 
-export async function runDevTools(
-  browser: Browser,
-  args: string[],
-): Promise<CommandResult> {
-  if (process.platform !== 'win32') {
-    throw new Error('reload-extension 当前仅支持 Windows');
-  }
-
-  const script = path.join(
-    scriptsDir,
-    browser === 'edge' ? 'chrome-devtools-edge.ps1' : 'chrome-devtools-chrome.ps1',
-  );
-  const powershellArgs = [
-    '-NoLogo',
-    '-NoProfile',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    script,
-    ...args,
-  ];
-
-  const shells = ['pwsh.exe', 'powershell.exe'];
-  let lastError: NodeJS.ErrnoException | undefined;
-
-  for (const shell of shells) {
+async function startWorker(browser: Browser): Promise<ChildProcessWithoutNullStreams> {
+  if (process.platform !== 'win32') throw new Error('reload-extension 当前仅支持 Windows');
+  for (const shell of ['pwsh.exe', 'powershell.exe']) {
+    const child = spawn(shell, [
+      '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+      path.join(scriptsDir, 'devtools-session.ps1'),
+      '-Browser', browser === 'edge' ? 'msedge' : 'chrome',
+    ], { cwd: packageRoot, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     try {
-      return await spawnCapture(shell, powershellArgs);
+      await new Promise<void>((resolve, reject) => {
+        child.once('spawn', resolve);
+        child.once('error', reject);
+      });
+      return child;
     } catch (error) {
-      const cause = error as NodeJS.ErrnoException;
-      if (cause.code !== 'ENOENT') throw error;
-      lastError = cause;
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   }
-
-  throw new Error(
-    `未找到 PowerShell: ${lastError?.message ?? 'pwsh.exe / powershell.exe 不可用'}`,
-  );
+  throw new Error('未找到 PowerShell: pwsh.exe / powershell.exe 不可用');
 }
 
-function spawnCapture(command: string, args: string[]): Promise<CommandResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: packageRoot,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', chunk => {
-      stdout += chunk;
-    });
-    child.stderr.on('data', chunk => {
-      stderr += chunk;
-    });
-
-    child.once('error', reject);
-    child.once('exit', code => {
-      // chrome-devtools-mcp daemon 可能继承启动进程的输出句柄，
-      // PowerShell 自身退出即代表当前命令执行完成。
-      child.stdout.destroy();
-      child.stderr.destroy();
-
-      if (code === 0) {
-        resolve({ stdout, stderr });
-        return;
-      }
-
-      const details = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
-      reject(
-        new Error(
-          `${command} 执行失败，退出码 ${code}${details ? `\n${details}` : ''}`,
-        ),
-      );
-    });
-  });
+/** 单次操作共用一个 PowerShell 进程与浏览器连接，结束后关闭会话。 */
+export async function withDevToolsSession<T>(
+  browser: Browser,
+  operation: (run: RunDevTools) => Promise<T>,
+): Promise<T> {
+  const session = createCommandSession(await startWorker(browser));
+  try {
+    return await operation(session.run);
+  } finally {
+    await session.close();
+  }
 }

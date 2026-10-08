@@ -14,4 +14,6 @@ export interface ListExtensionsOptions {
 export interface ReloadExtensionOptions extends ListExtensionsOptions {
   name?: string;
   id?: string;
+  /** false 时跳过缓存读取，查询成功并完成重载后更新缓存。 */
+  cache?: boolean;
 }

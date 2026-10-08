@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 import { Command, InvalidArgumentError } from 'commander';
-import { listExtensions, reloadExtension } from './index.js';
+import { clearExtensionCache, listExtensions, reloadExtension } from './index.js';
 import type { BrowserName } from './types.js';
 
 interface CliOptions {
   browser: BrowserName;
   id?: string;
   list?: boolean;
+  cache: boolean;
+  clearCache?: boolean;
 }
 
 const packageJson = JSON.parse(
@@ -22,6 +24,8 @@ const program = new Command()
   .option('-b, --browser <browser>', '目标浏览器', parseBrowser, 'edge')
   .option('--id <extension-id>', '直接按扩展 ID 重新加载')
   .option('--list', '列出已安装扩展')
+  .option('--no-cache', '跳过缓存读取，按名称重新查找并更新 ID')
+  .option('--clear-cache', '清空全部浏览器的名称映射缓存后退出')
   .addHelpText(
     'after',
     `
@@ -30,9 +34,19 @@ const program = new Command()
   $ reload-extension "Web Toolkit" --browser chrome
   $ reload-extension --id ncekidoiekbflbbpoldpfldjnbccfmmm
   $ reload-extension --list
+  $ reload-extension "Web Toolkit" --no-cache
+  $ reload-extension --clear-cache
 `,
   )
   .action(async (name: string | undefined, options: CliOptions) => {
+    if (options.clearCache) {
+      if (name || options.id || options.list || options.cache === false) {
+        throw new InvalidArgumentError('--clear-cache 不能与扩展名称、--id、--list 或 --no-cache 同时使用');
+      }
+      await clearExtensionCache();
+      console.log('已清空扩展名称缓存。');
+      return;
+    }
     if (options.list) {
       const extensions = await listExtensions({ browser: options.browser });
       for (const extension of extensions) {
@@ -51,6 +65,7 @@ const program = new Command()
       name,
       id: options.id,
       browser: options.browser,
+      cache: options.cache,
     });
     const browser = options.browser === 'msedge' ? 'edge' : options.browser;
     console.log(`Reloaded "${extension.name}" (${extension.id}) in ${browser}.`);

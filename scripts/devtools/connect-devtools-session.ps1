@@ -25,6 +25,7 @@ if ($SessionId -notmatch '^[a-fA-F0-9-]+$') {
 
 . (Join-Path $PSScriptRoot 'chromium-connect.ps1')
 . (Join-Path $PSScriptRoot 'package-runtime.ps1')
+. (Join-Path $PSScriptRoot 'daemon-state.ps1')
 
 # CLI 入口由 package-runtime.ps1 从项目依赖解析。
 
@@ -185,7 +186,7 @@ function Get-StartArguments {
     $args = @('start', "--sessionId=$SessionId", $extensionsFlag, '--autoConnect')
     if ($Browser -eq 'msedge') {
         $edgeData = Get-BrowserUserDataDir
-        $args += "--userDataDir=`"$edgeData`""
+        $args += "--userDataDir=$edgeData"
     }
     return $args
 }
@@ -194,13 +195,18 @@ function Invoke-StartConnection {
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     [ChromiumConnectNativeWindow]::StartFlashSuppression([IntPtr[]]$script:chromiumBrowserMainWindowHandles)
     try {
-        $started = Start-ChromeDevToolsCliProcess -Arguments (Get-StartArguments)
+        $started = Start-ChromeDevToolsCliProcess -Arguments (Get-StartArguments) -CaptureOutput
         $process = $started.Process
         $result = Wait-ChromiumProcessWithAuthorization -Process $process -WaitSeconds $TimeoutSeconds
     } finally {
         [ChromiumConnectNativeWindow]::StopFlashSuppression()
     }
     $watch.Stop()
+
+    $startOutput = $started.StdoutTask.GetAwaiter().GetResult().Trim()
+    $startError = $started.StderrTask.GetAwaiter().GetResult().Trim()
+    if ($startOutput) { Write-Host $startOutput }
+    if ($startError) { Write-Host $startError }
 
     Write-Host ("START_MS={0:N1} CLICKS={1} EXIT={2} SESSION={3}" -f $watch.Elapsed.TotalMilliseconds, $result.ClickCount, $result.ExitCode, $SessionId)
 
@@ -218,13 +224,18 @@ function Invoke-ListPages {
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     [ChromiumConnectNativeWindow]::StartFlashSuppression([IntPtr[]]$script:chromiumBrowserMainWindowHandles)
     try {
-        $started = Start-ChromeDevToolsCliProcess -Arguments @('list_pages', "--sessionId=$SessionId")
+        $started = Start-ChromeDevToolsCliProcess -Arguments @('list_pages', "--sessionId=$SessionId") -CaptureOutput
         $process = $started.Process
         $result = Wait-ChromiumProcessWithAuthorization -Process $process -WaitSeconds $TimeoutSeconds
     } finally {
         [ChromiumConnectNativeWindow]::StopFlashSuppression()
     }
     $watch.Stop()
+
+    $listOutput = $started.StdoutTask.GetAwaiter().GetResult().Trim()
+    $listError = $started.StderrTask.GetAwaiter().GetResult().Trim()
+    if ($listOutput) { Write-Host $listOutput }
+    if ($listError) { Write-Host $listError }
 
     Write-Host ("LIST_MS={0:N1} CLICKS={1} EXIT={2} TIMEOUT={3} SESSION={4}" -f $watch.Elapsed.TotalMilliseconds, $result.ClickCount, $result.ExitCode, $result.TimedOut, $SessionId)
     return $result
@@ -255,6 +266,7 @@ function Invoke-ListPagesQuiet {
     return $result
 }
 
+$sessionLock = Enter-DevToolsSessionLock
 try {
     Ensure-DormantPageTargetCompatibility
 
@@ -272,7 +284,14 @@ try {
         return
     }
 
-    Invoke-StartConnection | Out-Null
+    Repair-DevToolsDaemonState
+    try {
+        Invoke-StartConnection | Out-Null
+    } catch {
+        Write-Host "DEVTOOLS_START_FAILED SESSION=$SessionId ERROR=$($_.Exception.Message) RETRY=1"
+        Repair-DevToolsDaemonState -Reset
+        Invoke-StartConnection | Out-Null
+    }
     if (-not $ListPages) {
         $listResult = Invoke-ListPagesQuiet
         if ($listResult.TimedOut) {
@@ -304,5 +323,8 @@ try {
     }
     throw "list_pages 失败，退出码 $($listResult.ExitCode)。"
 } finally {
-    Close-StartedBrowser
+    try { Close-StartedBrowser } finally {
+        $sessionLock.ReleaseMutex()
+        $sessionLock.Dispose()
+    }
 }

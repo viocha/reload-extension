@@ -32,14 +32,22 @@ export function adaptConnectionScript(source: string, connector: boolean): strin
   return result;
 }
 
+export function adaptDaemonStateScript(source: string): string {
+  return replaceRequired(source.replace(/\r\n/g, '\n'),
+    /    \$entry = Join-Path \(Split-Path \(Get-Command chrome-devtools\)\.Source -Parent\) 'node_modules\/chrome-devtools-mcp\/build\/src\/daemon\/daemon\.js'/,
+    "    $entry = Join-Path $chromeDevToolsPackageRoot 'build/src/daemon/daemon.js'",
+    'daemon 进程身份依赖路径');
+}
+
 export async function syncDevTools(skillsRoot: string, targetRoot = projectRoot): Promise<void> {
   const sourceRoot = path.resolve(targetRoot, skillsRoot);
   const sourceScripts = path.join(sourceRoot, 'chrome-devtools-cli-connect', 'scripts');
   // 全部读取和适配成功后再写入，缺失文件或源脚本变化时保留已有快照。
-  const [shared, wrapper, connector, edge, chrome] = await Promise.all([
+  const [shared, wrapper, connector, daemon, edge, chrome] = await Promise.all([
     readFile(path.join(sourceRoot, 'shared', 'chromium-connect.ps1'), 'utf8'),
     readFile(path.join(sourceScripts, 'browser-cli-wrapper.ps1'), 'utf8'),
     readFile(path.join(sourceScripts, 'connect-devtools-session.ps1'), 'utf8'),
+    readFile(path.join(sourceScripts, 'daemon-state.ps1'), 'utf8'),
     readFile(path.join(sourceRoot, 'chrome-devtools-cli-connect', 'chrome-devtools-edge.ps1'), 'utf8'),
     readFile(path.join(sourceRoot, 'chrome-devtools-cli-connect', 'chrome-devtools-chrome.ps1'), 'utf8'),
   ]);
@@ -47,6 +55,7 @@ export async function syncDevTools(skillsRoot: string, targetRoot = projectRoot)
     'chromium-connect.ps1': shared,
     'browser-cli-wrapper.ps1': adaptConnectionScript(wrapper, false),
     'connect-devtools-session.ps1': adaptConnectionScript(connector, true),
+    'daemon-state.ps1': adaptDaemonStateScript(daemon),
     'chrome-devtools-edge.ps1': replaceRequired(edge, /\$PSScriptRoot\/scripts\/browser-cli-wrapper\.ps1/, '$PSScriptRoot/browser-cli-wrapper.ps1', 'Edge wrapper 路径'),
     'chrome-devtools-chrome.ps1': replaceRequired(chrome, /\$PSScriptRoot\/scripts\/browser-cli-wrapper\.ps1/, '$PSScriptRoot/browser-cli-wrapper.ps1', 'Chrome wrapper 路径'),
   };

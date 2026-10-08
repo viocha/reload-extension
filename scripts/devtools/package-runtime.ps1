@@ -26,5 +26,10 @@ if (-not (Test-Path -LiteralPath $cliEntry)) {
 
 function Invoke-ChromeDevToolsCli {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
-    & $node.Source $cliEntry @Arguments
+    $output = @(& $node.Source $cliEntry @Arguments 2>&1)
+    $exitCode = $LASTEXITCODE
+    $output | Write-Output
+    if ($exitCode -ne 0) {
+        throw "Chrome DevTools CLI 执行失败，退出码 $exitCode`n$($output -join "`n")"
+    }
 }

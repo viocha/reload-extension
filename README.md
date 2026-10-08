@@ -20,6 +20,22 @@ npm install -g reload-extension
 reload-extension "Web Toolkit"
 ```
 
+按名称重载成功后，名称与 ID 的映射保存到 `%LOCALAPPDATA%\reload-extension\cache`，有效期为 30 天。缓存按浏览器隔离，后续调用直接使用缓存 ID，跳过扩展列表查询。缓存 ID 不存在时自动重新按名称查找并更新映射；连接或权限错误直接报告。删除缓存目录可清除全部映射。
+
+跳过缓存读取，重新按名称查找并在重载成功后更新缓存：
+
+```powershell
+reload-extension "Web Toolkit" --no-cache
+```
+
+清空 Chrome 和 Edge 的全部名称映射缓存并退出，不连接浏览器：
+
+```powershell
+reload-extension --clear-cache
+```
+
+`--clear-cache` 单独执行，不能与扩展名称、`--id`、`--list` 或 `--no-cache` 同时使用。
+
 指定 Chrome：
 
 ```powershell
@@ -52,6 +68,8 @@ await reloadExtension({ name: 'Web Toolkit', browser: 'edge' });
 
 `browser` 支持 `edge`、`msedge` 和 `chrome`，默认 `edge`。
 
+API 传入 `cache: false` 可重新查询并更新缓存；`clearExtensionCache()` 清空全部名称映射缓存。
+
 ## 开发
 
 安装依赖：
@@ -80,7 +98,7 @@ SKILLS_REPO_DIR=D:/IT/ai/skills
 
 路径支持绝对路径或相对于本项目的路径。Bun 自动读取 `.env`，系统环境变量优先。配置后，`bun run build` 先同步共享脚本和 Chrome DevTools 连接脚本，再构建；也可通过 `bun run sync:devtools` 单独同步。未配置时使用仓库内的脚本快照，CI 无需本机 skills 目录。已配置的源文件缺失或结构不符合预期时，构建报错。
 
-`scripts/devtools/` 中除 `package-runtime.ps1` 外的脚本均由同步生成，应随代码提交。同步器自动适配项目内 CLI 依赖路径和独立 session（Edge：`e10ad`，Chrome：`c10ad`）；`package-runtime.ps1` 提供 npm 包运行时的依赖解析。更新连接逻辑时修改 skills 源文件，再执行构建。
+`scripts/devtools/` 中除 `package-runtime.ps1` 和 `devtools-session.ps1` 外的脚本均由同步生成，应随代码提交。同步器自动适配项目内 CLI 依赖路径和独立 session（Edge：`e10ad`，Chrome：`c10ad`）；`package-runtime.ps1` 提供 npm 包运行时的依赖解析，`devtools-session.ps1` 在单个 PowerShell 进程中完成连接、查询、重载和清理，一次操作只检查一次连接。更新连接逻辑时修改 skills 源文件，再执行构建。
 
 构建后的 CLI 和库入口位于：
 

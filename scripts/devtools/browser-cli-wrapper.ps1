@@ -15,6 +15,7 @@ $sessionId = if ($Browser -eq 'msedge') { 'e10ad' } else { 'c10ad' }
 $connectScript = Join-Path $PSScriptRoot 'connect-devtools-session.ps1'
 . (Join-Path $PSScriptRoot 'chromium-connect.ps1')
 . (Join-Path $PSScriptRoot 'package-runtime.ps1')
+. (Join-Path $PSScriptRoot 'daemon-state.ps1')
 $script:startedBrowserProcess = $null
 
 function Get-BrowserProcesses {
@@ -42,21 +43,11 @@ function Close-StartedBrowser {
 }
 
 function Test-DaemonHealthy([object[]]$BrowserProcesses) {
-    $runtimeDir = Join-Path ([IO.Path]::GetTempPath()) "chrome-devtools-mcp-$sessionId"
-    $pidFile = Join-Path $runtimeDir 'daemon.pid'
-    if (-not (Test-Path -LiteralPath $pidFile)) {
-        return $false
-    }
-
+    $state = Get-DevToolsDaemonState
+    if (-not $state.Owned -or -not $state.Pipe -or $state.Raw -ne [string]$state.Process.ProcessId) { return $false }
     try {
-        $daemonPid = [int]([IO.File]::ReadAllText($pidFile).Trim())
-        $daemonProcess = Get-Process -Id $daemonPid -ErrorAction Stop
+        $daemonProcess = Get-Process -Id $state.Process.ProcessId -ErrorAction Stop
     } catch {
-        return $false
-    }
-
-    $pipePath = "\\.\pipe\chrome-devtools-mcp-$sessionId-$env:USERNAME\server.sock"
-    if (-not (Test-Path -LiteralPath $pipePath -ErrorAction SilentlyContinue)) {
         return $false
     }
 
@@ -93,6 +84,7 @@ function Ensure-Connection {
     }
 }
 
+$sessionLock = Enter-DevToolsSessionLock
 try {
     if (-not $CliArgs -or $CliArgs.Count -eq 0) {
         Invoke-ChromeDevToolsCli --help
@@ -111,10 +103,12 @@ try {
 
     switch ($command) {
         'status' {
+            Repair-DevToolsDaemonState
             Invoke-ChromeDevToolsCli @CliArgs "--sessionId=$sessionId"
             return
         }
         'stop' {
+            Repair-DevToolsDaemonState
             Invoke-ChromeDevToolsCli @CliArgs "--sessionId=$sessionId"
             return
         }
@@ -130,5 +124,8 @@ try {
         }
     }
 } finally {
-    Close-StartedBrowser
+    try { Close-StartedBrowser } finally {
+        $sessionLock.ReleaseMutex()
+        $sessionLock.Dispose()
+    }
 }

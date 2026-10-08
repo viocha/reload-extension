@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { adaptConnectionScript, syncDevTools } from '../scripts/sync-devtools';
+import { adaptConnectionScript, adaptDaemonStateScript, syncDevTools } from '../scripts/sync-devtools';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -13,8 +13,21 @@ const wrapper = `$sessionId = if ($Browser -eq 'msedge') { 'ed9e' } else { 'c470
 $skillRoot = Get-Item -LiteralPath (Split-Path $PSScriptRoot -Parent) -Force
 $skillsRoot = Split-Path $skillRoot -Parent
 . (Join-Path $skillsRoot 'shared\\chromium-connect.ps1')
+. (Join-Path $PSScriptRoot 'daemon-state.ps1')
 chrome-devtools @CliArgs "--sessionId=$sessionId"
 `;
+
+const daemon = `function Get-DevToolsDaemonState {
+    $entry = Join-Path (Split-Path (Get-Command chrome-devtools).Source -Parent) 'node_modules/chrome-devtools-mcp/build/src/daemon/daemon.js'
+}
+`;
+
+test('daemon 身份核对使用项目依赖路径', () => {
+  const adapted = adaptDaemonStateScript(daemon);
+  expect(adapted).toContain("$entry = Join-Path $chromeDevToolsPackageRoot 'build/src/daemon/daemon.js'");
+  expect(adapted).not.toContain('Get-Command chrome-devtools');
+  expect(() => adaptDaemonStateScript('结构变化')).toThrow('daemon 进程身份依赖路径');
+});
 const connector = `${wrapper}
 $cli = Get-Command chrome-devtools -ErrorAction Stop
 $node = Get-Command node.exe -ErrorAction Stop
@@ -54,6 +67,7 @@ async function createFixture() {
   await writeFile(path.join(root, 'skills', 'shared', 'chromium-connect.ps1'), '共享脚本快照');
   await writeFile(path.join(skill, 'scripts', 'browser-cli-wrapper.ps1'), wrapper);
   await writeFile(path.join(skill, 'scripts', 'connect-devtools-session.ps1'), connector);
+  await writeFile(path.join(skill, 'scripts', 'daemon-state.ps1'), daemon);
   for (const browser of ['edge', 'chrome']) {
     await writeFile(path.join(skill, `chrome-devtools-${browser}.ps1`), '& "$PSScriptRoot/scripts/browser-cli-wrapper.ps1"');
   }
@@ -68,6 +82,22 @@ test('从相对 skills 目录同步全部脚本', async () => {
   expect(await readFile(path.join(output, 'chrome-devtools-edge.ps1'), 'utf8')).toBe('& "$PSScriptRoot/browser-cli-wrapper.ps1"');
   expect(await readFile(path.join(output, 'chrome-devtools-chrome.ps1'), 'utf8')).toBe('& "$PSScriptRoot/browser-cli-wrapper.ps1"');
   expect(await readFile(path.join(output, 'connect-devtools-session.ps1'), 'utf8')).toContain('Invoke-ChromeDevToolsCli');
+  expect(await readFile(path.join(output, 'daemon-state.ps1'), 'utf8')).toBe(adaptDaemonStateScript(daemon));
+  for (const name of ['browser-cli-wrapper.ps1', 'connect-devtools-session.ps1']) {
+    const script = await readFile(path.join(output, name), 'utf8');
+    expect(script.indexOf("'package-runtime.ps1'")).toBeLessThan(script.indexOf("'daemon-state.ps1'"));
+  }
+});
+
+test('daemon 源文件缺失时保留全部脚本快照', async () => {
+  const root = await createFixture();
+  await syncDevTools('skills', root);
+  const output = path.join(root, 'scripts', 'devtools');
+  const names = ['chromium-connect.ps1', 'browser-cli-wrapper.ps1', 'connect-devtools-session.ps1', 'daemon-state.ps1'];
+  const snapshots = await Promise.all(names.map((name) => readFile(path.join(output, name), 'utf8')));
+  await rm(path.join(root, 'skills', 'chrome-devtools-cli-connect', 'scripts', 'daemon-state.ps1'));
+  await expect(syncDevTools('skills', root)).rejects.toThrow('ENOENT');
+  expect(await Promise.all(names.map((name) => readFile(path.join(output, name), 'utf8')))).toEqual(snapshots);
 });
 
 test('适配失败时不覆盖已有脚本快照', async () => {
