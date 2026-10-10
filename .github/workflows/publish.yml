@@ -24,6 +24,8 @@ jobs:
         with:
           repository: viocha/skills
           path: upstream-skills
+          token: ${{ secrets.GH_TOKEN }}
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

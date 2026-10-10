@@ -119,8 +119,11 @@ dist/index.d.ts
 仓库需要配置 Actions Secret：
 
 ```text
+GH_TOKEN
 NPM_TOKEN
 ```
+
+`GH_TOKEN` 使用能访问私有 `viocha/skills` 仓库的 GitHub token；经典 PAT 需要 `repo` 权限。工作流通过该 Secret 拉取 skills 上游源码。`NPM_TOKEN` 用于发布 npm 包。
 
 ## 要求
 
