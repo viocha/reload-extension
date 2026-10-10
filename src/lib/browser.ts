@@ -4,8 +4,6 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { createCommandSession } from './browser-session.js';
 
-import { createExtensionScript } from './playwright-code.js';
-
 type Browser = 'edge' | 'chrome';
 export interface CommandResult { stdout: string; stderr: string }
 export type RunBrowser = (args: string[]) => Promise<CommandResult>;
@@ -46,7 +44,7 @@ export async function withBrowserSession<T>(
 ): Promise<T> {
   const session = createCommandSession(await startWorker(browser));
   try {
-    return await operation(args => session.run(['run', createExtensionScript(args)]));
+    return await operation(args => session.run(args));
   } finally {
     await session.close();
   }

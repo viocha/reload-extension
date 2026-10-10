@@ -4,3 +4,5 @@ dist/
 *.tgz
 .env
 .env.local
+scripts/playwright/chromium-connect.ps1
+upstream-skills/

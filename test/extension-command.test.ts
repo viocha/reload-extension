@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createExtensionScript } from '../src/lib/playwright-code';
+import { executeExtensionCommand } from '../src/lib/extension-command';
 
 const extension = { id: 'dfbdlidakbmfedfidhpbnelkkjoombhj', name: 'Bookmark Pro', path: 'D:\\扩展\\Bookmark Pro' };
 async function execute(args: string[], load: () => Promise<object> = async () => ({ id: extension.id })) {
@@ -12,8 +12,9 @@ async function execute(args: string[], load: () => Promise<object> = async () =>
     },
     detach: async () => { calls.push('detach'); },
   };
-  const run = new Function('return (' + createExtensionScript(args) + ')')();
-  const result = await run({ context: () => ({ browser: () => ({ newBrowserCDPSession: async () => cdp }) }) });
+  let result: any;
+  try { result = await executeExtensionCommand({ newBrowserCDPSession: async () => cdp } as any, args); }
+  catch (error) { result = { error: (error as Error).message }; }
   return { result, calls };
 }
 test('查询返回扩展并释放 CDP session', async () => {
