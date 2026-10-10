@@ -38,7 +38,7 @@ test('进程异常退出时请求和清理均明确失败', async () => {
   await expect(session.close()).rejects.toThrow('退出码 2');
 });
 
-test.skipIf(process.platform !== 'win32')('PowerShell 会话只连接一次，并识别退出码为零的工具错误', async () => {
+test.skipIf(process.platform !== 'win32')('PowerShell 共用临时空白页、限制命令超时，操作失败后清理页面与连接', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reload-session-test-'));
   const worker = await readFile(new URL('../scripts/playwright/browser-session.ps1', import.meta.url), 'utf8');
   await writeFile(path.join(root, 'browser-session.ps1'), worker);
@@ -53,8 +53,9 @@ function Invoke-PlaywrightCli {
 }
 `);
   await writeFile(path.join(root, 'connect-playwright-session.ps1'), `
-param([string]$Browser, [string]$Session, [int]$TimeoutSeconds, [string[]]$CommandArgs)
-[IO.File]::AppendAllText((Join-Path $PSScriptRoot 'connections'), '1')
+param([string]$Browser, [string]$Session, [switch]$ReuseSession, [int]$TimeoutSeconds, [int]$CommandTimeoutSeconds, [string[]]$CommandArgs)
+if (-not $ReuseSession -or $CommandTimeoutSeconds -ne 10 -or $TimeoutSeconds -ne 10) { throw '缺少连接复用或命令超时' }
+[IO.File]::AppendAllText((Join-Path $PSScriptRoot 'commands'), ($CommandArgs -join ' ') + "\n")
 Invoke-PlaywrightCli @CommandArgs
 `);
   try {
@@ -76,7 +77,10 @@ Invoke-PlaywrightCli @CommandArgs
       child.once('error', reject);
       child.once('exit', code => code === 0 ? resolve() : reject(new Error(errors)));
     });
-    expect(await readFile(path.join(root, 'connections'), 'utf8')).toBe('1');
+    expect((await readFile(path.join(root, 'commands'), 'utf8')).trim().split(/\r?\n/)).toEqual([
+      'tab-new about:blank', '--raw run-code list', '--raw run-code good',
+      '--raw run-code bad', 'tab-close', 'detach',
+    ]);
     expect(await readFile(path.join(root, 'stopped'), 'utf8')).toBe('yes');
   } finally {
     await rm(root, { recursive: true, force: true });

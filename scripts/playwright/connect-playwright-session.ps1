@@ -3,6 +3,7 @@ param(
     [ValidateSet('chrome', 'msedge')]
     [string]$Browser,
 
+    [ValidateRange(1, 10)]
     [int]$TimeoutSeconds = 5,
 
     [string]$Session = '',
@@ -17,7 +18,8 @@ param(
 
     [string[]]$CommandArgs,
 
-    [int]$CommandTimeoutSeconds = 120,
+    [ValidateRange(1, 10)]
+    [int]$CommandTimeoutSeconds = 10,
 
     [switch]$DisconnectAfterCommand,
 

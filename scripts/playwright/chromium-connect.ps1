@@ -374,15 +374,12 @@ function Wait-ChromiumProcessWithAuthorization {
     )
 
     $startedAt = [DateTime]::UtcNow
-    $deadline = $startedAt.AddSeconds($WaitSeconds)
-    $hardDeadline = $startedAt.AddSeconds([Math]::Max($WaitSeconds * 3, $WaitSeconds + 5))
+    $deadline = $startedAt.AddSeconds([Math]::Min($WaitSeconds, 10))
     $clickCount = 0
 
     while (-not $Process.HasExited -and [DateTime]::UtcNow -lt $deadline) {
         if (Invoke-ChromiumRemoteDebuggingAllow) {
             $clickCount++
-            $extended = [DateTime]::UtcNow.AddSeconds([Math]::Max($WaitSeconds, 15))
-            $deadline = if ($extended -lt $hardDeadline) { $extended } else { $hardDeadline }
         }
         Stop-ChromiumBrowserWindowFlashing
         if (-not $Process.HasExited) {
