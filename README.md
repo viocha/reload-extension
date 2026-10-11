@@ -57,7 +57,7 @@ reload-extension --list --browser chrome
 reload-extension --id ncekidoiekbflbbpoldpfldjnbccfmmm
 ```
 
-连接浏览器时可能触发 Remote Debugging 授权，授权脚本会处理提示。查询和重载共用浏览器级 CDP 连接，每条命令最多等待 10 秒；操作完成或失败后断开连接。工具不创建、关闭或激活标签页，也不读取页面内容。
+连接浏览器时可能触发 Remote Debugging 授权，授权脚本会处理提示。查询和重载共用 CDP 连接，每条命令最多等待 10 秒；操作完成或失败后断开连接。重载通过隐藏的扩展管理页调用浏览器正式重载接口，完成后关闭隐藏页，不切换当前标签页，不读取用户页面内容。
 
 ## API
 
@@ -102,7 +102,7 @@ SKILLS_REPO_DIR=D:/IT/ai/skills
 
 `scripts/playwright/chromium-connect.ps1` 是从 skills 仓库的 `shared/chromium-connect.ps1` 生成的打包产物，由 Git 忽略；所有修改必须在上游完成，然后重新同步，禁止在本仓库复制或独立维护该文件。发布包包含生成文件，安装后的用户无需上游仓库。授权、超时等待、窗口状态恢复和进程树清理由上游共享函数提供。`browser-session.ps1` 是本项目的 worker 管理及命令通信入口。`dist/browser-worker.js` 使用 `chromium.connectOverCDP` 直接连接当前浏览器。
 
-扩展查询和重载只使用浏览器级 CDP 的 `Extensions.getExtensions`、`Extensions.loadUnpacked`，需要支持这些协议方法的 Chromium 浏览器。用户当前标签页的初始化和加载状态不影响重载。
+扩展查询使用 `Extensions.getExtensions`，重载使用隐藏 `chrome://extensions/` 页面的 `chrome.developerPrivate.reload`，需要支持 `Extensions.getExtensions` 和隐藏 target 的 Chromium 浏览器。正式重载保留扩展的安装方式和配置，浏览器重启后持久安装的扩展会正常加载。
 
 构建后的 CLI 和库入口位于：
 

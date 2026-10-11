@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, copyFile, rm } from 'node:fs/promi
 import path from 'node:path';
 import os from 'node:os';
 
-test.skipIf(process.platform !== 'win32')('浏览器 worker 复用 CDP，成功与失败均不访问页面，结束时断开连接', async () => {
+test.skipIf(process.platform !== 'win32')('浏览器 worker 复用 CDP，清理隐藏管理页，结束时断开连接', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reload-worker-'));
   try {
     await writeFile(path.join(root, 'package.json'), '{"type":"module"}');
@@ -26,15 +26,30 @@ function Stop-ChromiumProcessTree { param($Process); $Process.Kill($true) }
     await writeFile(path.join(pkg, 'package.json'), JSON.stringify({ type: 'module', exports: './index.js' }));
     await writeFile(path.join(pkg, 'index.js'), `
 import { appendFileSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
 const record = value => appendFileSync(${JSON.stringify(path.join(root, 'calls'))}, value + '\\n');
 export const chromium = { connectOverCDP: async (channel, options) => {
   record('connect:' + channel + ':' + options.timeout + ':' + options.noDefaults);
   return new Proxy({
-    newBrowserCDPSession: async () => ({ send: async (method, params) => {
+    newBrowserCDPSession: async () => { const cdp = Object.assign(new EventEmitter(), { send: async (method, params) => {
       record(method);
       if (method === 'Extensions.getExtensions') return { extensions: [{ id: 'id', path: 'D:/扩展' }] };
-      return { id: 'id' };
-    }, detach: async () => record('detach') }),
+      if (method === 'Target.createTarget') return { targetId: 'manager' };
+      if (method === 'Target.attachToTarget') return { sessionId: 'session' };
+      if (method === 'Target.sendMessageToTarget') {
+        const command = JSON.parse(params.message);
+        let result = {};
+        if (command.method === 'Page.navigate') {
+          result = { loaderId: 'loader' };
+          cdp.emit('Target.receivedMessageFromTarget', { sessionId: 'session', message: JSON.stringify({
+            method: 'Page.lifecycleEvent', params: { name: 'load', loaderId: 'loader' },
+          }) });
+        }
+        if (command.method === 'Runtime.evaluate') result = { result: { value: true } };
+        cdp.emit('Target.receivedMessageFromTarget', { sessionId: 'session', message: JSON.stringify({ id: command.id, result }) });
+      }
+      return {};
+    }, detach: async () => record('detach') }); return cdp; },
     close: async () => record('disconnect'),
   }, { get(target, key) {
     if (key === 'then') return undefined;
@@ -65,7 +80,9 @@ export const chromium = { connectOverCDP: async (channel, options) => {
     });
     expect((await readFile(path.join(root, 'calls'), 'utf8')).trim().split('\n')).toEqual([
       'connect:msedge:10000:true', 'Extensions.getExtensions', 'detach',
-      'Extensions.getExtensions', 'Extensions.loadUnpacked', 'detach',
+      'Extensions.getExtensions', 'Target.createTarget', 'Target.attachToTarget',
+      'Target.sendMessageToTarget', 'Target.sendMessageToTarget', 'Target.sendMessageToTarget', 'Target.sendMessageToTarget',
+      'Target.closeTarget', 'detach',
       'Extensions.getExtensions', 'detach', 'disconnect',
     ]);
   } finally { await rm(root, { recursive: true, force: true }); }
