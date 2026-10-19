@@ -5,4 +5,5 @@ dist/
 .env
 .env.local
 scripts/playwright/chromium-connect.ps1
+scripts/playwright/runtime-types.ps1
 upstream-skills/

@@ -9,9 +9,11 @@ test('从上游生成授权脚本，上游缺失或未配置时即使已有产�
     await mkdir(path.join(root, 'skills/shared'), { recursive: true });
     const source = path.join(root, 'skills/shared/chromium-connect.ps1');
     await writeFile(source, '授权脚本');
+    await writeFile(path.join(root, 'skills/shared/runtime-types.ps1'), '类型缓存');
     await syncPlaywright('skills', root);
     const target = path.join(root, 'scripts/playwright/chromium-connect.ps1');
     expect(await readFile(target, 'utf8')).toBe('授权脚本');
+    expect(await readFile(path.join(root, 'scripts/playwright/runtime-types.ps1'), 'utf8')).toBe('类型缓存');
     await rm(source);
     await expect(syncPlaywright(undefined, root)).rejects.toThrow('必须配置 SKILLS_REPO_DIR');
     await expect(syncPlaywright('  ', root)).rejects.toThrow('必须配置 SKILLS_REPO_DIR');

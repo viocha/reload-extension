@@ -13,6 +13,7 @@ test.skipIf(process.platform !== 'win32')('浏览器 worker 复用 CDP，清理�
     await copyFile(new URL('../scripts/playwright/browser-session.ps1', import.meta.url), path.join(scripts, 'browser-session.ps1'));
     const upstream = process.env.SKILLS_REPO_DIR?.trim();
     if (!upstream) throw new Error('必须配置 SKILLS_REPO_DIR 以验证上游共享逻辑');
+    await copyFile(path.join(upstream, 'shared/runtime-types.ps1'), path.join(scripts, 'runtime-types.ps1'));
     const shared = await readFile(path.join(upstream, 'shared/chromium-connect.ps1'), 'utf8');
     await writeFile(path.join(scripts, 'chromium-connect.ps1'), shared + `
 function Initialize-ChromiumRemoteDebuggingAuthorization { param($Browser) }

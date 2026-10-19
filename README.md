@@ -100,7 +100,7 @@ SKILLS_REPO_DIR=D:/IT/ai/skills
 
 路径支持绝对路径或相对于本项目的路径。Bun 自动读取 `.env`，系统环境变量优先。`bun run build` 先同步浏览器授权共享脚本，再构建；也可通过 `bun run sync:playwright` 单独同步。未配置上游路径或上游文件不存在时直接报错，即使本地已有生成文件也不能跳过同步。CI 拉取 skills 上游仓库并配置该路径。
 
-`scripts/playwright/chromium-connect.ps1` 是从 skills 仓库的 `shared/chromium-connect.ps1` 生成的打包产物，由 Git 忽略；所有修改必须在上游完成，然后重新同步，禁止在本仓库复制或独立维护该文件。发布包包含生成文件，安装后的用户无需上游仓库。授权、超时等待、窗口状态恢复和进程树清理由上游共享函数提供。`browser-session.ps1` 是本项目的 worker 管理及命令通信入口。`dist/browser-worker.js` 使用 `chromium.connectOverCDP` 直接连接当前浏览器。
+`scripts/playwright/chromium-connect.ps1` 和 `runtime-types.ps1` 是从 skills 仓库的同名 `shared/` 文件生成的打包产物，由 Git 忽略；所有修改必须在上游完成，然后重新同步，禁止在本仓库复制或独立维护这些文件。发布包包含生成文件，安装后的用户无需上游仓库。授权、超时等待、窗口状态恢复和进程树清理由上游共享函数提供。`browser-session.ps1` 是本项目的 worker 管理及命令通信入口。`dist/browser-worker.js` 使用 `chromium.connectOverCDP` 直接连接当前浏览器。
 
 扩展查询使用 `Extensions.getExtensions`，重载使用隐藏 `chrome://extensions/` 页面的 `chrome.developerPrivate.reload`，需要支持 `Extensions.getExtensions` 和隐藏 target 的 Chromium 浏览器。正式重载保留扩展的安装方式和配置，浏览器重启后持久安装的扩展会正常加载。
 
