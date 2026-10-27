@@ -24,7 +24,11 @@ async function execute(args: string[], reload: () => Promise<object> = async () 
             });
           }
         }
-        if (request.method === 'Runtime.evaluate') result = await reload();
+        if (request.method === 'Runtime.evaluate') {
+          result = request.params.expression.includes('chrome.developerPrivate.reload(')
+            ? await reload()
+            : { result: { value: { tabs: [], windows: [], sidePanelUrls: [] } } };
+        }
         cdp.emit('Target.receivedMessageFromTarget', {
           sessionId: 'manager-session', message: JSON.stringify({ id: request.id, result }),
         });
@@ -50,7 +54,7 @@ test('重载通过隐藏管理页保留安装方式，等待完成并清理页�
   const commands = calls.filter(Array.isArray).filter(call => call[0] === 'Target.sendMessageToTarget')
     .map(call => JSON.parse(call[1].message));
   expect(commands.map(command => command.method)).toEqual([
-    'Page.enable', 'Page.setLifecycleEventsEnabled', 'Page.navigate', 'Runtime.evaluate',
+    'Page.enable', 'Page.setLifecycleEventsEnabled', 'Page.navigate', 'Runtime.evaluate', 'Runtime.evaluate',
   ]);
   expect(commands.at(-1).params.expression).toContain(`chrome.developerPrivate.reload("${extension.id}"`);
   expect(commands.at(-1).params.awaitPromise).toBe(true);

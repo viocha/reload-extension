@@ -46,7 +46,9 @@ export const chromium = { connectOverCDP: async (channel, options) => {
             method: 'Page.lifecycleEvent', params: { name: 'load', loaderId: 'loader' },
           }) });
         }
-        if (command.method === 'Runtime.evaluate') result = { result: { value: true } };
+        if (command.method === 'Runtime.evaluate') result = { result: { value:
+          command.params.expression.includes('chrome.developerPrivate.reload(') ? true : { tabs: [], windows: [], sidePanelUrls: [] }
+        } };
         cdp.emit('Target.receivedMessageFromTarget', { sessionId: 'session', message: JSON.stringify({ id: command.id, result }) });
       }
       return {};
@@ -83,6 +85,7 @@ export const chromium = { connectOverCDP: async (channel, options) => {
       'connect:msedge:10000:true', 'Extensions.getExtensions', 'detach',
       'Extensions.getExtensions', 'Target.createTarget', 'Target.attachToTarget',
       'Target.sendMessageToTarget', 'Target.sendMessageToTarget', 'Target.sendMessageToTarget', 'Target.sendMessageToTarget',
+      'Target.sendMessageToTarget',
       'Target.closeTarget', 'detach',
       'Extensions.getExtensions', 'detach', 'disconnect',
     ]);
