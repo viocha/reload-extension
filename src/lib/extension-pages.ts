@@ -27,10 +27,10 @@ export interface ExtensionPages {
   sidePanelUrls: string[];
 }
 
-/** 此函数通过 CDP 在扩展管理页执行，不能引用外部运行时变量。 */
-export async function captureExtensionPages(api: any, extensionId: string): Promise<ExtensionPages> {
-  const [allTabs, allWindows, info] = await Promise.all([
-    api.tabs.query({}), api.windows.getAll(), api.developerPrivate.getExtensionInfo(extensionId),
+/** 此函数通过 CDP 在扩展自身页面执行，不能引用外部运行时变量。 */
+export async function captureExtensionPages(api: any, extensionId: string, sidePanelUrls: string[] = []): Promise<ExtensionPages> {
+  const [allTabs, allWindows] = await Promise.all([
+    api.tabs.query({}), api.windows.getAll(),
   ]);
   const prefix = `chrome-extension://${extensionId}/`;
   const tabs = allTabs.filter((tab: any) => (tab.pendingUrl || tab.url || '').startsWith(prefix))
@@ -43,9 +43,7 @@ export async function captureExtensionPages(api: any, extensionId: string): Prom
     windows: allWindows
       .map(({ id, type, incognito, focused, state, left, top, width, height }: ExtensionWindow) =>
         ({ id, type, incognito, focused, state, left, top, width, height })),
-    sidePanelUrls: [...new Set<string>((info.views || [])
-      .filter((view: any) => view.type === 'EXTENSION_SIDE_PANEL' && !view.isIframe)
-      .map((view: any) => view.url))],
+    sidePanelUrls,
   };
 }
 

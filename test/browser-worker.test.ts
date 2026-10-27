@@ -35,6 +35,7 @@ export const chromium = { connectOverCDP: async (channel, options) => {
     newBrowserCDPSession: async () => { const cdp = Object.assign(new EventEmitter(), { send: async (method, params) => {
       record(method);
       if (method === 'Extensions.getExtensions') return { extensions: [{ id: 'id', path: 'D:/扩展' }] };
+      if (method === 'Target.getTargets') return { targetInfos: [] };
       if (method === 'Target.createTarget') return { targetId: 'manager' };
       if (method === 'Target.attachToTarget') return { sessionId: 'session' };
       if (method === 'Target.sendMessageToTarget') {
@@ -47,7 +48,7 @@ export const chromium = { connectOverCDP: async (channel, options) => {
           }) });
         }
         if (command.method === 'Runtime.evaluate') result = { result: { value:
-          command.params.expression.includes('chrome.developerPrivate.reload(') ? true : { tabs: [], windows: [], sidePanelUrls: [] }
+          command.params.expression.includes('chrome.developerPrivate.reload(') ? true : { views: [] }
         } };
         cdp.emit('Target.receivedMessageFromTarget', { sessionId: 'session', message: JSON.stringify({ id: command.id, result }) });
       }
@@ -85,7 +86,7 @@ export const chromium = { connectOverCDP: async (channel, options) => {
       'connect:msedge:10000:true', 'Extensions.getExtensions', 'detach',
       'Extensions.getExtensions', 'Target.createTarget', 'Target.attachToTarget',
       'Target.sendMessageToTarget', 'Target.sendMessageToTarget', 'Target.sendMessageToTarget', 'Target.sendMessageToTarget',
-      'Target.sendMessageToTarget',
+      'Target.getTargets', 'Target.sendMessageToTarget',
       'Target.closeTarget', 'detach',
       'Extensions.getExtensions', 'detach', 'disconnect',
     ]);

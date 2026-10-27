@@ -8,16 +8,11 @@ const tab = (id: number, url = origin + 'options.html', extra: Partial<Extension
   ({ id, windowId: 1, index: id - 1, url, active: false, pinned: false, groupId: -1, ...extra });
 const state = (tabs: ExtensionTab[] = []): ExtensionPages => ({ tabs, windows: [window], sidePanelUrls: [] });
 
-test('快照只记录目标扩展页面及侧边栏，URL 参数和重复标签分别保留', async () => {
+test('快照只记录目标扩展页面，URL 参数、重复标签和侧边栏路径分别保留', async () => {
   const result = await captureExtensionPages({
     tabs: { query: async () => [tab(1), tab(2), tab(3, origin + 'options.html?q=1#search'), tab(4, 'https://example.com/'), tab(5, 'chrome-extension://other/options.html')] },
     windows: { getAll: async () => [window] },
-    developerPrivate: { getExtensionInfo: async () => ({ views: [
-      { type: 'EXTENSION_SIDE_PANEL', url: origin + 'panel.html' },
-      { type: 'EXTENSION_SIDE_PANEL', url: origin + 'panel.html', isIframe: true },
-      { type: 'EXTENSION_SERVICE_WORKER_BACKGROUND', url: origin + 'background.js' },
-    ] }) },
-  }, 'test');
+  }, 'test', [origin + 'panel.html']);
   expect(result.tabs.map(item => item.id)).toEqual([1, 2, 3]);
   expect(result.tabs[2]!.url).toBe(origin + 'options.html?q=1#search');
   expect(result.sidePanelUrls).toEqual([origin + 'panel.html']);

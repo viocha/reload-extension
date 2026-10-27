@@ -1,5 +1,6 @@
 import type { CDPSession } from 'playwright-core';
-import { captureExtensionPages, restoreExtensionPages, type ExtensionPages } from './extension-pages.js';
+import { restoreExtensionPages } from './extension-pages.js';
+import { captureExtensionSnapshot } from './extension-snapshot.js';
 import { captureSidePanels, restoreSidePanels } from './extension-side-panels.js';
 import { createMissingExtensionPages, closeUnusedCreatedPages } from './create-extension-pages.js';
 import { evaluateTarget } from './target-evaluate.js';
@@ -57,7 +58,10 @@ export async function reloadFromExtensionManager(cdp: CDPSession, extensionId: s
         }
         return response.result?.value as T;
       };
-      const snapshot = await evaluate<ExtensionPages>(`(${captureExtensionPages.toString()})(chrome, ${JSON.stringify(extensionId)})`);
+      const info = await evaluate<{ views?: { type: string; url: string; isIframe?: boolean }[] }>(`chrome.developerPrivate.getExtensionInfo(${JSON.stringify(extensionId)})`);
+      const sidePanelUrls = [...new Set((info.views || [])
+        .filter(view => view.type === 'EXTENSION_SIDE_PANEL' && !view.isIframe).map(view => view.url))];
+      const snapshot = await captureExtensionSnapshot(cdp, extensionId, sidePanelUrls);
       const panels = await captureSidePanels(cdp, snapshot.sidePanelUrls);
       const response = await send('Runtime.evaluate', {
         expression: `chrome.developerPrivate.reload(${JSON.stringify(extensionId)}, {
@@ -72,7 +76,7 @@ export async function reloadFromExtensionManager(cdp: CDPSession, extensionId: s
       if (response.result?.value !== true) throw new Error('扩展管理页未确认重载成功。');
       try {
         const created = snapshot.tabs.length
-          ? await createMissingExtensionPages(cdp, snapshot, await evaluate<ExtensionPages>(`(${captureExtensionPages.toString()})(chrome, ${JSON.stringify(extensionId)})`))
+          ? await createMissingExtensionPages(cdp, snapshot, await captureExtensionSnapshot(cdp, extensionId, [], snapshot.tabs[0]!.url))
           : { windowIds: {}, createdTargets: [] };
         let restored: Awaited<ReturnType<typeof restoreExtensionPages>> = { windowIds: {}, tabIds: {}, errors: [] };
         if (snapshot.tabs.length) {

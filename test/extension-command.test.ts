@@ -9,6 +9,7 @@ async function execute(args: string[], reload: () => Promise<object> = async () 
     send: async (method: string, params?: any) => {
       calls.push([method, params]);
       if (method === 'Extensions.getExtensions') return { extensions: [extension] };
+      if (method === 'Target.getTargets') return { targetInfos: [] };
       if (method === 'Target.createTarget') return { targetId: 'hidden-target' };
       if (method === 'Target.attachToTarget') return { sessionId: 'manager-session' };
       if (method === 'Target.sendMessageToTarget') {
@@ -25,9 +26,10 @@ async function execute(args: string[], reload: () => Promise<object> = async () 
           }
         }
         if (request.method === 'Runtime.evaluate') {
+          if (!request.params.expression.startsWith('chrome.developerPrivate.')) throw new Error('Chrome 管理页没有 tabs/windows API');
           result = request.params.expression.includes('chrome.developerPrivate.reload(')
             ? await reload()
-            : { result: { value: { tabs: [], windows: [], sidePanelUrls: [] } } };
+            : { result: { value: { views: [] } } };
         }
         cdp.emit('Target.receivedMessageFromTarget', {
           sessionId: 'manager-session', message: JSON.stringify({ id: request.id, result }),
