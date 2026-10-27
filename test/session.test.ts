@@ -10,7 +10,8 @@ const withBrowserSession = mock(async (browser: string, operation: (run: (args: 
 });
 mock.module('../src/lib/browser.js', () => ({ withBrowserSession }));
 const cache = new Map<string, { id: string; name: string }>();
-mock.module('../src/lib/extension-cache.js', () => ({ extensionCache: {
+const cacheModule = { ...await import('../src/lib/extension-cache.js') };
+mock.module('../src/lib/extension-cache.js', () => ({ ...cacheModule, extensionCache: {
   get: async (browser: string, name: string) => cache.get(browser + ':' + name),
   set: async (browser: string, name: string, value: { id: string; name: string }) => { cache.set(browser + ':' + name, { id: value.id, name: value.name }); },
   remove: async (browser: string, name: string) => { cache.delete(browser + ':' + name); },
