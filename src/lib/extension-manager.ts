@@ -4,6 +4,7 @@ import { captureExtensionSnapshot, withExtensionPage } from './extension-snapsho
 import { captureSidePanels, restoreSidePanels } from './extension-side-panels.js';
 import { createMissingExtensionPages, closeUnusedCreatedPages, type PreparedExtensionTab } from './create-extension-pages.js';
 import { evaluateTarget } from './target-evaluate.js';
+import { reloadManagedExtension } from './reload-managed-extension.js';
 
 /** 隐藏的管理页提供正式重载接口，不改变当前标签或扩展的安装方式。 */
 export async function reloadFromExtensionManager(cdp: CDPSession, extensionId: string): Promise<void> {
@@ -58,23 +59,14 @@ export async function reloadFromExtensionManager(cdp: CDPSession, extensionId: s
         }
         return response.result?.value as T;
       };
-      const info = await evaluate<{ views?: { type: string; url: string; isIframe?: boolean }[] }>(`chrome.developerPrivate.getExtensionInfo(${JSON.stringify(extensionId)})`);
+      const info = await evaluate<{ state?: string; views?: { type: string; url: string; isIframe?: boolean }[] }>(`chrome.developerPrivate.getExtensionInfo(${JSON.stringify(extensionId)})`);
       const sidePanelUrls = [...new Set((info.views || [])
         .filter(view => view.type === 'EXTENSION_SIDE_PANEL' && !view.isIframe).map(view => view.url))];
       const hasNewTabView = info.views?.some(view => !view.isIframe && /^(chrome|edge):\/\/newtab\/?$/.test(view.url)) ?? false;
       const snapshot = await captureExtensionSnapshot(cdp, extensionId, sidePanelUrls, hasNewTabView);
       const panels = await captureSidePanels(cdp, snapshot.sidePanelUrls);
-      const response = await send('Runtime.evaluate', {
-        expression: `chrome.developerPrivate.reload(${JSON.stringify(extensionId)}, {
-          failQuietly: true, populateErrorForUnpacked: true
-        }).then(error => { if (error) throw new Error(error.error || JSON.stringify(error)); return true; })`,
-        awaitPromise: true,
-        returnByValue: true,
-      });
-      if (response.exceptionDetails) {
-        throw new Error(response.exceptionDetails.exception?.description || response.exceptionDetails.text);
-      }
-      if (response.result?.value !== true) throw new Error('扩展管理页未确认重载成功。');
+      const reloaded = await evaluate<boolean>(`(${reloadManagedExtension.toString()})(chrome.developerPrivate, ${JSON.stringify(extensionId)}, ${info.state === 'DISABLED'})`);
+      if (reloaded !== true) throw new Error('扩展管理页未确认重载成功。');
       try {
         let restored: Awaited<ReturnType<typeof restoreExtensionPages>> = { windowIds: {}, tabIds: {}, errors: [] };
         if (snapshot.tabs.length) {

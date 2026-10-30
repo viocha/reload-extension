@@ -48,7 +48,7 @@ export const chromium = { connectOverCDP: async (channel, options) => {
           }) });
         }
         if (command.method === 'Runtime.evaluate') result = { result: { value:
-          command.params.expression.includes('chrome.developerPrivate.reload(') ? true : { views: [] }
+          command.params.expression.includes('async function reloadManagedExtension(') ? true : { views: [] }
         } };
         cdp.emit('Target.receivedMessageFromTarget', { sessionId: 'session', message: JSON.stringify({ id: command.id, result }) });
       }

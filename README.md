@@ -59,6 +59,8 @@ reload-extension --id ncekidoiekbflbbpoldpfldjnbccfmmm
 
 连接浏览器时可能触发 Remote Debugging 授权，授权脚本会处理提示。查询和重载共用 CDP 连接，每条命令最多等待 10 秒；操作完成或失败后断开连接。重载通过隐藏的扩展管理页调用浏览器正式重载接口，完成后关闭隐藏页，不切换当前标签页，不读取用户页面内容。
 
+禁用的扩展也支持重载，并保留禁用状态；工具通过浏览器的安装完成事件确认重载完成。
+
 ### 恢复扩展界面
 
 重载默认恢复目标扩展已打开的标签页和正在显示的侧边栏，无需增加参数。例如，Web Toolkit 的 `chrome-extension://ncekidoiekbflbbpoldpfldjnbccfmmm/options.html` 设置页会在重载后重新打开。

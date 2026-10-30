@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { executeExtensionCommand } from '../src/lib/extension-command';
 
 const extension = { id: 'dfbdlidakbmfedfidhpbnelkkjoombhj', name: 'Bookmark Pro', path: 'D:\\扩展\\Bookmark Pro' };
-async function execute(args: string[], reload: () => Promise<object> = async () => ({ result: { value: true } }), newtab?: { api: any; viewUrl?: string }) {
+async function execute(args: string[], reload: () => Promise<object> = async () => ({ result: { value: true } }), newtab?: { api: any; viewUrl?: string }, manager?: { state: string; api: any }) {
   const calls: unknown[] = [];
   const cdp = Object.assign(new EventEmitter(), {
     send: async (method: string, params?: any) => {
@@ -39,10 +39,10 @@ async function execute(args: string[], reload: () => Promise<object> = async () 
           }
         }
         if (request.method === 'Runtime.evaluate') {
-          if (!request.params.expression.startsWith('chrome.developerPrivate.')) throw new Error('Chrome 管理页没有 tabs/windows API');
-          result = request.params.expression.includes('chrome.developerPrivate.reload(')
-            ? await reload()
-            : { result: { value: { views: newtab ? [{ type: 'TAB_CONTENTS', url: newtab.viewUrl ?? 'edge://newtab/' }] : [] } } };
+          if (!request.params.expression.startsWith('chrome.developerPrivate.') && !request.params.expression.includes('async function reloadManagedExtension(')) throw new Error('Chrome 管理页没有 tabs/windows API');
+          result = request.params.expression.includes('async function reloadManagedExtension(')
+            ? manager ? { result: { value: await new Function('chrome', `return ${request.params.expression}`)({ developerPrivate: manager.api }) } } : await reload()
+            : { result: { value: { state: manager?.state ?? 'ENABLED', views: newtab ? [{ type: 'TAB_CONTENTS', url: newtab.viewUrl ?? 'edge://newtab/' }] : [] } } };
         }
         cdp.emit('Target.receivedMessageFromTarget', {
           sessionId: 'manager-session', message: JSON.stringify({ id: request.id, result }),
@@ -140,8 +140,29 @@ test('重载通过隐藏管理页保留安装方式，等待完成并清理页�
   expect(commands.map(command => command.method)).toEqual([
     'Page.enable', 'Page.setLifecycleEventsEnabled', 'Page.navigate', 'Runtime.evaluate', 'Runtime.evaluate',
   ]);
-  expect(commands.at(-1).params.expression).toContain(`chrome.developerPrivate.reload("${extension.id}"`);
+  expect(commands.at(-1).params.expression).toContain(`)(chrome.developerPrivate, "${extension.id}", false)`);
   expect(commands.at(-1).params.awaitPromise).toBe(true);
+  expect(calls.slice(-2)).toEqual([['Target.closeTarget', { targetId: 'hidden-target' }], 'detach']);
+  expect(cdp.listenerCount('Target.receivedMessageFromTarget')).toBe(0);
+});
+
+test('禁用扩展重载通过安装事件完成，关闭隐藏管理页并断开连接', async () => {
+  const listeners = new Set<(event: any) => void>();
+  const { result, calls, cdp } = await execute(['reload_extension', extension.id], undefined, undefined, {
+    state: 'DISABLED',
+    api: {
+      onItemStateChanged: {
+        addListener: (listener: (event: any) => void) => { listeners.add(listener); },
+        removeListener: (listener: (event: any) => void) => { listeners.delete(listener); },
+      },
+      reload: () => {
+        for (const listener of listeners) listener({ item_id: extension.id, event_type: 'INSTALLED' });
+        return new Promise(() => {});
+      },
+    },
+  });
+  expect(result).toEqual({ reloaded: true });
+  expect(listeners.size).toBe(0);
   expect(calls.slice(-2)).toEqual([['Target.closeTarget', { targetId: 'hidden-target' }], 'detach']);
   expect(cdp.listenerCount('Target.receivedMessageFromTarget')).toBe(0);
 });
