@@ -10,7 +10,7 @@ const tab = { id: 2, windowId: 1, index: 1, url, active: false, pinned: true, gr
 function fixture(targets: any[], query: () => Promise<object[]> = async () => [tab]) {
   const calls: any[] = [];
   // 扩展自身提供 tabs/windows，不提供管理页的 developerPrivate。
-  const chrome = { tabs: { query }, windows: { getAll: async () => [window] } };
+  const chrome = { tabs: { query }, windows: { getAll: async () => [window] }, extension: { getViews: () => [] } };
   const cdp = Object.assign(new EventEmitter(), {
     send: async (method: string, params: any = {}) => {
       calls.push([method, params]);
@@ -58,14 +58,14 @@ test('没有打开扩展界面时无需创建辅助页面，直接重载', async
 
 test('重载后扩展页全部关闭时，通过隐藏扩展文档读取窗口信息并清理', async () => {
   const { cdp, calls } = fixture([], async () => []);
-  expect(await captureExtensionSnapshot(cdp, 'test', [], url)).toEqual({ tabs: [], windows: [window], sidePanelUrls: [] });
-  expect(calls).toContainEqual(['Target.createTarget', { url, hidden: true }]);
+  expect(await captureExtensionSnapshot(cdp, 'test', [], true)).toEqual({ tabs: [], windows: [window], sidePanelUrls: [] });
+  expect(calls).toContainEqual(['Target.createTarget', { url: origin + '/manifest.json', hidden: true }]);
   expect(calls.at(-1)).toEqual(['Target.closeTarget', { targetId: 'helper' }]);
 });
 
 test('快照读取失败时仍关闭隐藏扩展文档，保留实际错误', async () => {
   const { cdp, calls } = fixture([], async () => { throw new Error('读取失败'); });
-  await expect(captureExtensionSnapshot(cdp, 'test', [], url)).rejects.toThrow('读取失败');
+  await expect(captureExtensionSnapshot(cdp, 'test', [], true)).rejects.toThrow('读取失败');
   expect(calls.at(-1)).toEqual(['Target.closeTarget', { targetId: 'helper' }]);
   expect(cdp.listenerCount('Target.receivedMessageFromTarget')).toBe(0);
 });

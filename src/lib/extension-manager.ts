@@ -1,8 +1,8 @@
 import type { CDPSession } from 'playwright-core';
-import { restoreExtensionPages } from './extension-pages.js';
-import { captureExtensionSnapshot } from './extension-snapshot.js';
+import { captureExtensionPages, prepareForegroundExtensionTab, restoreExtensionPages, type ExtensionPages } from './extension-pages.js';
+import { captureExtensionSnapshot, withExtensionPage } from './extension-snapshot.js';
 import { captureSidePanels, restoreSidePanels } from './extension-side-panels.js';
-import { createMissingExtensionPages, closeUnusedCreatedPages } from './create-extension-pages.js';
+import { createMissingExtensionPages, closeUnusedCreatedPages, type PreparedExtensionTab } from './create-extension-pages.js';
 import { evaluateTarget } from './target-evaluate.js';
 
 /** 隐藏的管理页提供正式重载接口，不改变当前标签或扩展的安装方式。 */
@@ -61,7 +61,8 @@ export async function reloadFromExtensionManager(cdp: CDPSession, extensionId: s
       const info = await evaluate<{ views?: { type: string; url: string; isIframe?: boolean }[] }>(`chrome.developerPrivate.getExtensionInfo(${JSON.stringify(extensionId)})`);
       const sidePanelUrls = [...new Set((info.views || [])
         .filter(view => view.type === 'EXTENSION_SIDE_PANEL' && !view.isIframe).map(view => view.url))];
-      const snapshot = await captureExtensionSnapshot(cdp, extensionId, sidePanelUrls);
+      const hasNewTabView = info.views?.some(view => !view.isIframe && /^(chrome|edge):\/\/newtab\/?$/.test(view.url)) ?? false;
+      const snapshot = await captureExtensionSnapshot(cdp, extensionId, sidePanelUrls, hasNewTabView);
       const panels = await captureSidePanels(cdp, snapshot.sidePanelUrls);
       const response = await send('Runtime.evaluate', {
         expression: `chrome.developerPrivate.reload(${JSON.stringify(extensionId)}, {
@@ -75,19 +76,28 @@ export async function reloadFromExtensionManager(cdp: CDPSession, extensionId: s
       }
       if (response.result?.value !== true) throw new Error('扩展管理页未确认重载成功。');
       try {
-        const created = snapshot.tabs.length
-          ? await createMissingExtensionPages(cdp, snapshot, await captureExtensionSnapshot(cdp, extensionId, [], snapshot.tabs[0]!.url))
-          : { windowIds: {}, createdTargets: [] };
         let restored: Awaited<ReturnType<typeof restoreExtensionPages>> = { windowIds: {}, tabIds: {}, errors: [] };
         if (snapshot.tabs.length) {
-          const { targetInfos } = await cdp.send('Target.getTargets');
-          const page = targetInfos.find(target => target.type === 'page' && snapshot.tabs.some(tab => tab.url === target.url));
-          if (!page) throw new Error('未找到恢复后的扩展页面');
-          restored = await evaluateTarget(cdp, page.targetId,
-            `(${restoreExtensionPages.toString()})(chrome, ${JSON.stringify(snapshot)}, ${JSON.stringify(created.windowIds)})`,
-            false, `chrome-extension://${extensionId}`);
+          // 快照与恢复复用同一个扩展上下文，避免重复加载完整的新标签页应用。
+          const restore = async (targetId: string) => {
+            const origin = `chrome-extension://${extensionId}`;
+            const prepared = await evaluateTarget<PreparedExtensionTab | undefined>(cdp, targetId,
+              `(${prepareForegroundExtensionTab.toString()})(chrome, ${JSON.stringify(snapshot)})`, false, origin);
+            const current = await evaluateTarget<ExtensionPages>(cdp, targetId,
+              `(${captureExtensionPages.toString()})(chrome, ${JSON.stringify(extensionId)}, [], ${JSON.stringify([...snapshot.tabs.map(tab => tab.id), ...(prepared ? [prepared.tabId] : [])])})`, false, origin);
+            const created = await createMissingExtensionPages(cdp, snapshot, current, undefined, prepared,
+              (saved, windowId, index) => evaluateTarget<number>(cdp, targetId,
+                `chrome.tabs.create(${JSON.stringify({ url: saved.navigationUrl, windowId, index, active: false, pinned: saved.pinned })}).then(tab => tab.id)`, false, origin));
+            const result = await evaluateTarget<typeof restored>(cdp, targetId,
+              `(${restoreExtensionPages.toString()})(chrome, ${JSON.stringify(snapshot)}, ${JSON.stringify(created.windowIds)}, ${JSON.stringify(created.tabIds)})`, false, origin);
+            if (!result.errors.length) await closeUnusedCreatedPages(cdp, created.createdTargets, result.tabIds,
+              ids => evaluateTarget<void>(cdp, targetId, `chrome.tabs.remove(${JSON.stringify(ids)})`, false, origin));
+            return result;
+          };
+          const result = await withExtensionPage(cdp, extensionId, targetId => restore(targetId), true);
+          if (!result) throw new Error('未找到恢复后的扩展页面');
+          restored = result;
         }
-        if (!restored.errors.length) await closeUnusedCreatedPages(cdp, created.createdTargets, restored.tabIds);
         const panelErrors = await restoreSidePanels(cdp, extensionId, panels, restored.windowIds, restored.tabIds);
         const errors = [...restored.errors, ...panelErrors];
         if (errors.length) throw new Error(errors.join('\n'));
